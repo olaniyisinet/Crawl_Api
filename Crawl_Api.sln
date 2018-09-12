@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 15
+VisualStudioVersion = 15.0.27703.2047
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Crawl_Api", "Crawl_Api\Crawl_Api.csproj", "{728081B0-E253-4B56-9673-218F6FDAA0A1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "API", "API\API.csproj", "{CBAA266F-6698-4D81-AE5E-607543EFE082}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{728081B0-E253-4B56-9673-218F6FDAA0A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{728081B0-E253-4B56-9673-218F6FDAA0A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{728081B0-E253-4B56-9673-218F6FDAA0A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{728081B0-E253-4B56-9673-218F6FDAA0A1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CBAA266F-6698-4D81-AE5E-607543EFE082}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBAA266F-6698-4D81-AE5E-607543EFE082}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBAA266F-6698-4D81-AE5E-607543EFE082}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBAA266F-6698-4D81-AE5E-607543EFE082}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {F1D2CF09-4F25-4824-890B-912519BA3E00}
+	EndGlobalSection
+EndGlobal
