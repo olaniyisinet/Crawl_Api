@@ -11,12 +11,14 @@ using Microsoft.AspNet.Identity.Owin;
 using Microsoft.Owin.Security;
 using Microsoft.Owin.Security.Cookies;
 using API.Models;
-
-using static API.ApplicationUserManager;
+using Microsoft.AspNet.Identity.EntityFramework;
+using Microsoft.Owin.Security.OAuth;
+using API.Results;
+using API.Providers;
 
 namespace API.Controllers
 {
-    [Authorize]
+	[Authorize]
     [RoutePrefix("api/Account")]
     public class AccountController : ApiController
     {
@@ -220,6 +222,104 @@ namespace API.Controllers
 			}
 
 			return Ok();
+		}
+
+		// GET api/Account/ExternalLogin
+		[OverrideAuthentication]
+		[HostAuthentication(DefaultAuthenticationTypes.ExternalCookie)]
+		[AllowAnonymous]
+		[Route("ExternalLogin", Name = "ExternalLogin")]
+		public async Task<IHttpActionResult> GetExternalLogin(string provider, string error = null)
+		{
+			if (error != null)
+			{
+				return Redirect(Url.Content("~/") + "#error=" + Uri.EscapeDataString(error));
+			}
+
+			if (!User.Identity.IsAuthenticated)
+			{
+				return new ChallengeResult(provider, this);
+			}
+
+			ExternalLoginData externalLogin = ExternalLoginData.FromIdentity(User.Identity as ClaimsIdentity);
+
+			if (externalLogin == null)
+			{
+				return InternalServerError();
+			}
+
+			if (externalLogin.LoginProvider != provider)
+			{
+				Authentication.SignOut(DefaultAuthenticationTypes.ExternalCookie);
+				return new ChallengeResult(provider, this);
+			}
+
+			ApplicationUser user = await UserManager.FindAsync(new UserLoginInfo(externalLogin.LoginProvider,
+				externalLogin.ProviderKey));
+
+			bool hasRegistered = user != null;
+
+			if (hasRegistered)
+			{
+				Authentication.SignOut(DefaultAuthenticationTypes.ExternalCookie);
+
+				ClaimsIdentity oAuthIdentity = await user.GenerateUserIdentityAsync(UserManager,
+				   OAuthDefaults.AuthenticationType);
+				ClaimsIdentity cookieIdentity = await user.GenerateUserIdentityAsync(UserManager,
+					CookieAuthenticationDefaults.AuthenticationType);
+
+				AuthenticationProperties properties = ApplicationOAuthProvider.CreateProperties(user.UserName);
+				Authentication.SignIn(properties, oAuthIdentity, cookieIdentity);
+			}
+			else
+			{
+				IEnumerable<Claim> claims = externalLogin.GetClaims();
+				ClaimsIdentity identity = new ClaimsIdentity(claims, OAuthDefaults.AuthenticationType);
+				Authentication.SignIn(identity);
+			}
+
+			return Ok();
+		}
+
+		// GET api/Account/ExternalLogins?returnUrl=%2F&generateState=true
+		[AllowAnonymous]
+		[Route("ExternalLogins")]
+		public IEnumerable<ExternalLoginViewModel> GetExternalLogins(string returnUrl, bool generateState = false)
+		{
+			IEnumerable<AuthenticationDescription> descriptions = Authentication.GetExternalAuthenticationTypes();
+			List<ExternalLoginViewModel> logins = new List<ExternalLoginViewModel>();
+
+			string state;
+
+			if (generateState)
+			{
+				const int strengthInBits = 256;
+				state = RandomOAuthStateGenerator.Generate(strengthInBits);
+			}
+			else
+			{
+				state = null;
+			}
+
+			foreach (AuthenticationDescription description in descriptions)
+			{
+				ExternalLoginViewModel login = new ExternalLoginViewModel
+				{
+					Name = description.Caption,
+					Url = Url.Route("ExternalLogin", new
+					{
+						provider = description.AuthenticationType,
+						response_type = "token",
+						client_id = Startup.PublicClientId,
+						redirect_uri = new Uri(Request.RequestUri, returnUrl).AbsoluteUri,
+						state = state
+					}),
+					State = state
+				};
+				logins.Add(login);
+			}
+
+			return logins;
 		}
 
 		// POST api/Account/Register
