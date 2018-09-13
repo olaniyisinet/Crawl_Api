@@ -27,7 +27,14 @@ namespace API.Controllers
 		{
 		}
 
-        public ApplicationUserManager UserManager
+		public AccountController(ApplicationUserManager userManager,
+		  ISecureDataFormat<AuthenticationTicket> accessTokenFormat)
+		{
+			UserManager = userManager;
+			AccessTokenFormat = accessTokenFormat;
+		}
+
+		public ApplicationUserManager UserManager
         {
             get
             {
@@ -68,9 +75,49 @@ namespace API.Controllers
             Authentication.SignOut(CookieAuthenticationDefaults.AuthenticationType);
             return Ok();
         }
-	
-        // POST api/Account/ChangePassword
-        [Route("ChangePassword")]
+
+		// GET api/Account/ManageInfo?returnUrl=%2F&generateState=true
+		[Route("ManageInfo")]
+		public async Task<ManageInfoViewModel> GetManageInfo(string returnUrl, bool generateState = false)
+		{
+			IdentityUser user = await UserManager.FindByIdAsync(User.Identity.GetUserId());
+
+			if (user == null)
+			{
+				return null;
+			}
+
+			List<UserLoginInfoViewModel> logins = new List<UserLoginInfoViewModel>();
+
+			foreach (IdentityUserLogin linkedAccount in user.Logins)
+			{
+				logins.Add(new UserLoginInfoViewModel
+				{
+					LoginProvider = linkedAccount.LoginProvider,
+					ProviderKey = linkedAccount.ProviderKey
+				});
+			}
+
+			if (user.PasswordHash != null)
+			{
+				logins.Add(new UserLoginInfoViewModel
+				{
+					LoginProvider = LocalLoginProvider,
+					ProviderKey = user.UserName,
+				});
+			}
+
+			return new ManageInfoViewModel
+			{
+				LocalLoginProvider = LocalLoginProvider,
+				Email = user.UserName,
+				Logins = logins,
+				ExternalLoginProviders = GetExternalLogins(returnUrl, generateState)
+			};
+		}
+
+		// POST api/Account/ChangePassword
+		[Route("ChangePassword")]
         public async Task<IHttpActionResult> ChangePassword(ChangePasswordBindingModel model)
         {
             if (!ModelState.IsValid)
@@ -108,8 +155,75 @@ namespace API.Controllers
             return Ok();
         }
 
-        // POST api/Account/Register
-        [AllowAnonymous]
+		// POST api/Account/AddExternalLogin
+		[Route("AddExternalLogin")]
+		public async Task<IHttpActionResult> AddExternalLogin(AddExternalLoginBindingModel model)
+		{
+			if (!ModelState.IsValid)
+			{
+				return BadRequest(ModelState);
+			}
+
+			Authentication.SignOut(DefaultAuthenticationTypes.ExternalCookie);
+
+			AuthenticationTicket ticket = AccessTokenFormat.Unprotect(model.ExternalAccessToken);
+
+			if (ticket == null || ticket.Identity == null || (ticket.Properties != null
+				&& ticket.Properties.ExpiresUtc.HasValue
+				&& ticket.Properties.ExpiresUtc.Value < DateTimeOffset.UtcNow))
+			{
+				return BadRequest("External login failure.");
+			}
+
+			ExternalLoginData externalData = ExternalLoginData.FromIdentity(ticket.Identity);
+
+			if (externalData == null)
+			{
+				return BadRequest("The external login is already associated with an account.");
+			}
+
+			IdentityResult result = await UserManager.AddLoginAsync(User.Identity.GetUserId(),
+				new UserLoginInfo(externalData.LoginProvider, externalData.ProviderKey));
+
+			if (!result.Succeeded)
+			{
+				return GetErrorResult(result);
+			}
+
+			return Ok();
+		}
+
+		// POST api/Account/RemoveLogin
+		[Route("RemoveLogin")]
+		public async Task<IHttpActionResult> RemoveLogin(RemoveLoginBindingModel model)
+		{
+			if (!ModelState.IsValid)
+			{
+				return BadRequest(ModelState);
+			}
+
+			IdentityResult result;
+
+			if (model.LoginProvider == LocalLoginProvider)
+			{
+				result = await UserManager.RemovePasswordAsync(User.Identity.GetUserId());
+			}
+			else
+			{
+				result = await UserManager.RemoveLoginAsync(User.Identity.GetUserId(),
+					new UserLoginInfo(model.LoginProvider, model.ProviderKey));
+			}
+
+			if (!result.Succeeded)
+			{
+				return GetErrorResult(result);
+			}
+
+			return Ok();
+		}
+
+		// POST api/Account/Register
+		[AllowAnonymous]
         [Route("Register")]
         public async Task<IHttpActionResult> Register(RegisterBindingModel model)
         {
@@ -138,6 +252,40 @@ namespace API.Controllers
 
           // return Ok("successs");
         }
+
+		// POST api/Account/RegisterExternal
+		[OverrideAuthentication]
+		[HostAuthentication(DefaultAuthenticationTypes.ExternalBearer)]
+		[Route("RegisterExternal")]
+		public async Task<IHttpActionResult> RegisterExternal(RegisterExternalBindingModel model)
+		{
+			if (!ModelState.IsValid)
+			{
+				return BadRequest(ModelState);
+			}
+
+			var info = await Authentication.GetExternalLoginInfoAsync();
+			if (info == null)
+			{
+				return InternalServerError();
+			}
+
+			var user = new ApplicationUser() { UserName = model.Email, Email = model.Email };
+
+			IdentityResult result = await UserManager.CreateAsync(user);
+			if (!result.Succeeded)
+			{
+				return GetErrorResult(result);
+			}
+
+			result = await UserManager.AddLoginAsync(user.Id, info.Login);
+			if (!result.Succeeded)
+			{
+				return GetErrorResult(result);
+			}
+			return Ok();
+		}
+
 
 		protected override void Dispose(bool disposing)
         {
